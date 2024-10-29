@@ -1,11 +1,21 @@
 require("dotenv").config()
 
-const { processBatch } = require("./services/batchProcessor")
 const { readExcelFile } = require("./services/excelService")
+const {
+  processBatch,
+  saveBatchToDatabase,
+  batchEmitter
+} = require("./services/batchProcessor")
+
+// Listen for the "batchReady" event
+batchEmitter.on("batchReady", async (issuerChunk) => {
+  console.log("Saving batch to database...")
+  await saveBatchToDatabase(issuerChunk)
+})
 
 async function main() {
   try {
-    const filePath = "your_file.xlsx"
+    const filePath = "./issuer_list.xlsx"
     const sheetData = readExcelFile(filePath)
 
     // Configuration for batch size and S3 bucket
