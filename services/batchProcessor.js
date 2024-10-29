@@ -31,17 +31,51 @@ async function saveBatchToDatabase(batch) {
   }
 }
 
+async function updateIssuerCusips(issuerCusipChunk) {
+  try {
+    const db = await connectToDB()
+    const issuersCollection = db.collection("issuers")
+    const issuercusipsCollection = db.collection("issuercusips")
+
+    for (const { ticker, cusip } of issuerCusipChunk) {
+      const issuer = await issuersCollection.findOne({ ticker })
+      if (!issuer) {
+        console.error(`Issuer with ticker ${ticker} not found.`)
+        continue
+      }
+
+      const issuerId = issuer._id
+
+      await issuercusipsCollection.updateOne(
+        { issuer: issuerId },
+        {
+          $addToSet: { cusip: cusip }
+        },
+        { upsert: true }
+      )
+
+      console.log(
+        `Updated or inserted CUSIP ${cusip} for issuer with ticker ${ticker}`
+      )
+    }
+  } catch (error) {
+    console.error("Error updating issuer CUSIPs:", error)
+  }
+}
+
 async function processBatch(batch, bucketName, maxConcurrency = 10) {
   const results = []
   for (let i = 0; i < batch.length; i += maxConcurrency) {
     // Take a slice of the batch, limited to the max concurrency
     const chunk = batch.slice(i, i + maxConcurrency)
     const issuerChunk = []
+    const issuerCusipChunk = []
 
     const uploadPromises = chunk.map((row) => {
       const name = row["IssuerName"]
       const logoUrl = row["LogoURL"] // Assumes Excel column name is 'LogoURL'
       const ticker = row["Ticker"] ? row["Ticker"] : row["CUSIP"]
+      const cusip = row["CUSIP"] ?? null
       const logoName = `logos/${ticker}.png` // Customize the key name as needed
 
       console.log("LogoURL => ", { logoUrl, ticker, logoName })
@@ -54,7 +88,14 @@ async function processBatch(batch, bucketName, maxConcurrency = 10) {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       }
+      const issuerCusipChunkObj = {
+        ticker,
+        cusip,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
       issuerChunk.push(issuerObj)
+      issuerCusipChunk.push(issuerCusipChunkObj)
       // Call the upload function
       return uploadLogoToS3(logoUrl, bucketName, logoName, issuerObj)
     })
@@ -62,9 +103,14 @@ async function processBatch(batch, bucketName, maxConcurrency = 10) {
     // Wait for the current chunk to complete before moving to the next
     results.push(...(await Promise.all(uploadPromises)))
     console.log("PUSHING TO BATCH EMITTER =>", issuerChunk)
-    batchEmitter.emit("batchReady", issuerChunk)
+    batchEmitter.emit("batchReady", { issuerChunk, issuerCusipChunk })
   }
   return results
 }
 
-module.exports = { processBatch, saveBatchToDatabase, batchEmitter }
+module.exports = {
+  processBatch,
+  saveBatchToDatabase,
+  updateIssuerCusips,
+  batchEmitter
+}

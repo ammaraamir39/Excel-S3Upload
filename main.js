@@ -4,13 +4,15 @@ const { readExcelFile } = require("./services/excelService")
 const {
   processBatch,
   saveBatchToDatabase,
+  updateIssuerCusips,
   batchEmitter
 } = require("./services/batchProcessor")
 
 // Listen for the "batchReady" event
-batchEmitter.on("batchReady", async (issuerChunk) => {
+batchEmitter.on("batchReady", async ({ issuerChunk, issuerCusipChunk }) => {
   console.log("Saving batch to database...")
   await saveBatchToDatabase(issuerChunk)
+  await updateIssuerCusips(issuerCusipChunk)
 })
 
 async function main() {

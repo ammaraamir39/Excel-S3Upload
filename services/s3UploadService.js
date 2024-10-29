@@ -6,7 +6,7 @@ const s3Client = require("../clients/s3Client")
 async function uploadLogoToS3(imageUrl, bucketName, keyName, issuerObj) {
   try {
     const response = await axios.get(imageUrl, { responseType: "arraybuffer" })
-    console.log("Response from axios =>", response)
+    // console.log("Response from axios =>", response)
     const uploadParams = {
       Bucket: bucketName,
       Key: keyName,
